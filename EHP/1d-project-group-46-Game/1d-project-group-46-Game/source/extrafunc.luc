@@ -1,0 +1,24 @@
+module extrafunc (
+    input a[16],
+    input b[16],
+    input alufn_signal[6],
+    
+    output out[16]
+  ) {
+  
+  sig tempOut[5];
+  
+  always {
+    case(alufn_signal) {
+    //when alufn_signal is 3 -> last 4 digits of a added to b, out is 000000+
+      b000011:
+        tempOut = a[10:6] + b;
+        out = c{5b0, tempOut, a[5:0]};
+      b000100:
+        tempOut = a[10:6] - b;
+        out = c{5b0, tempOut, a[5:0]};
+      default:
+        out = a;
+    }
+  }
+}

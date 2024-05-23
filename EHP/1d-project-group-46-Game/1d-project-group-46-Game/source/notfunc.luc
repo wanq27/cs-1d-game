@@ -1,0 +1,9 @@
+module notfunc (
+    input a[16],
+    output out[16]
+  ) {
+  
+  always {
+    out = ~a;
+  }
+}

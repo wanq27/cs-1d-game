@@ -1,0 +1,53 @@
+module multiplier (
+    input a[16],
+    input b[16],
+    output mul[16]
+  ) {
+
+  full_adder fa[120];
+  var i, j;
+  var previous_row_fa_index;
+  var current_row_fa_index;
+  
+  always {
+  
+    for(i=0; i<15; i++) {
+      fa.x[i] = a[i] & b[1];
+      fa.y[i] = a[i+1] & b[0];
+      if (i == 0){
+        fa.cin[i] = b0;
+      }
+      else {
+        fa.cin[i] = fa.cout[i-1];
+      }
+    }  
+    
+    mul[0] = a[0] & b[0];
+    mul[1] = fa.s[0];
+    previous_row_fa_index = 0;
+    current_row_fa_index = 15;
+    
+    for(i=2; i<15; i++){
+      for(j=0; j<16-i; j++) {
+        fa.x[current_row_fa_index+j] = b[i] & a[j];
+        fa.y[current_row_fa_index+j] = fa.s[previous_row_fa_index+1+j];
+            
+        if (j == 0){
+          fa.cin[current_row_fa_index+j] = b0;
+        }
+        else {
+          fa.cin[current_row_fa_index+j] = fa.cout[current_row_fa_index+j-1];
+        }
+      }
+        
+      previous_row_fa_index = current_row_fa_index;
+      current_row_fa_index = current_row_fa_index+j;
+      mul[i] = fa.s[previous_row_fa_index];
+    }
+    
+    fa.x[119] = b[15] & a[0];
+    fa.y[119] = fa.s[118];
+    fa.cin[119] = b0;
+    mul[15] = fa.s[119];
+  }
+}

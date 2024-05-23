@@ -1,0 +1,103 @@
+module alu (
+    input a[16],
+    input b[16],
+    input clk,
+    input rst,
+    input alufn_signal[6],
+    output out[16],
+    output z,
+    output v,
+    output n
+  ) {
+  
+  adder adder;
+  boolean boolean;
+  shifter shifter;
+  compare compare; 
+  multiplier multiplier;
+  divider divider;
+  notfunc notfunc;
+  extrafunc extrafunc;
+  generate_random_box generate_random_box(.clk(clk), .rst(rst));
+  generate_random_bomb generate_random_bomb(.clk(clk), .rst(rst));
+  addition addition;
+
+
+  always {
+    z = adder.z;
+    v = adder.v;
+    n = adder.n;
+    adder.a = a;
+    adder.b = b;
+    adder.alufn_signal = alufn_signal; // must be set to 1 for compare
+    boolean.a = a;  
+    boolean.b = b;
+    boolean.alufn_signal = alufn_signal;
+    shifter.a = a;
+    shifter.b = b[3:0];
+    shifter.alufn_signal = alufn_signal;
+    compare.z = adder.z;
+    compare.v = adder.v;
+    compare.n = adder.n;
+    compare.alufn_signal = alufn_signal;
+    multiplier.a = a;
+    multiplier.b = b;
+    divider.a = a;
+    divider.b = b;
+    notfunc.a = a;
+    extrafunc.a = a;
+    extrafunc.b = b;
+    extrafunc.alufn_signal = alufn_signal;
+    addition.a=a;
+    addition.b=b;
+    
+    
+    case (alufn_signal[5:0]) {
+      b000000:
+      out = adder.out;
+      b000001: 
+      out = adder.out;
+      b000010:       
+      out = multiplier.mul;
+      b011000: 
+      out = boolean.bool; // AND
+      b011110: 
+      out = boolean.bool; // OR
+      b010110: 
+      out = boolean.bool; // XOR
+      b011010: 
+      out = boolean.bool; // A
+      b100000: 
+      out = shifter.shift; // Shift Left
+      b100001: 
+      out = shifter.shift; // Shift Right
+      b100011: 
+      out = shifter.shift; // Shift Right Arithmetic
+      b110011: // =
+      out = compare.cmp;
+      b110101: // <
+      out = compare.cmp;     
+      b110111: // <=
+      out = compare.cmp;
+      b111111: // Extra Functionality: Divider
+      out = divider.d;
+      b100010: // Extra Functionality: Not
+      out = notfunc.out;
+      adder.a = notfunc.out; // For N
+      adder.b = 0; // For N
+      b000011: // Extra Functionality: Add (only to ------XXXX------ bits)
+      out = extrafunc.out; 
+      b000100: // Extra Functionality: Subtract (only to ------XXXX------ bits)
+      out = extrafunc.out;
+      b000101: //variable_counter, generate random 10bit number
+      out=generate_random_box.boxout;
+      b000111: //variable_counter, generate random 10bit number
+      out=generate_random_bomb.bombout;
+      b000110:
+      out=addition.out;
+        
+      default:
+        out = 0;
+    }
+  }
+}

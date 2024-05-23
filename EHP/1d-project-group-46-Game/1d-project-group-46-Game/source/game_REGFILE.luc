@@ -1,0 +1,89 @@
+// Contains all game information
+
+module game_REGFILE (
+    input clk,  // clock
+    input rst,  // reset
+    input writeAddress[4],
+    input we,
+    input data[16],
+    
+    input readAddressA[4],
+    input readAddressB[4],
+    output outA[16],
+    output outB[16],
+    
+    output playeronepos[16],
+    output playertwopos[16],
+    output boxpos[16],
+    output bombpos[16],
+    output numofrounds[16],
+    output playerholding[16],
+    output bombtimer[16],
+    output defuseprogress[16]
+  ) {
+
+  .clk(clk) {
+    .rst(rst) {
+      dff playerOnePosition[16](#INIT(0)); // initialises memory for playerOnePosition and initialises it to 0
+      dff playerTwoPosition[16](#INIT(0));
+      dff boxPosition[16](#INIT(0));
+      dff bombPosition[16](#INIT(0));
+      dff numofRounds[16](#INIT(1));
+      dff playerHolding[16](#INIT(0));
+      dff bombTimer[16](#INIT(20));
+      dff defuseProgress[16](#INIT(7));
+    }
+  }
+  
+  always {
+    playeronepos = playerOnePosition.q;
+    playertwopos = playerTwoPosition.q;
+    boxpos = boxPosition.q;
+    bombpos = bombPosition.q;
+    numofrounds = numofRounds.q;
+    playerholding = playerHolding.q;
+    bombtimer = bombTimer.q;
+    defuseprogress = defuseProgress.q;
+    
+    // Write Port
+    if (we) {
+      case(writeAddress) {
+        b0000: playerOnePosition.d = data;
+        b0001: playerTwoPosition.d = data;
+        b0010: boxPosition.d = data;
+        b0011: bombPosition.d = data;
+        b0100: numofRounds.d = data;
+        b0101: playerHolding.d = data;
+        b0110: bombTimer.d = data;
+        b0111: defuseProgress.d = data;
+      }
+    }
+    
+    // Read Port A
+    case(readAddressA) {
+      b0000: outA = playerOnePosition.q;
+      b0001: outA = playerTwoPosition.q;
+      b0010: outA = boxPosition.q;
+      b0011: outA = bombPosition.q;
+      b0100: outA = numofRounds.q;
+      b0101: outA = playerHolding.q;
+      b0110: outA = bombTimer.q;
+      b0111: outA = defuseProgress.q;
+      default:
+        outA = 0;
+    }
+    
+    case(readAddressB) {
+      b0000: outB = playerOnePosition.q;
+      b0001: outB = playerTwoPosition.q;
+      b0010: outB = boxPosition.q;
+      b0011: outB = bombPosition.q;
+      b0100: outB = numofRounds.q;
+      b0101: outB = playerHolding.q;
+      b0110: outB = bombTimer.q;
+      b0111: outB = defuseProgress.q;
+      default:
+        outB = 0;
+    }
+  }
+}

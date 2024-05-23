@@ -1,0 +1,49 @@
+module generate_random_box #(
+SEED = 128h843233523a613966423b622562592c62: SEED.WIDTH == 128 && SEED[95:0] != 0
+  )
+  (
+    input clk,  // clock
+    input rst,
+    output boxout[16]
+  ) {
+
+ 
+.clk(clk){
+   edge_detector edge_detector_next;
+   dff seed[16]; // don't reset the seed because we don't want the same random number each time we press reset
+    
+  .rst(rst){
+     counter fastclock(#SIZE(1),#DIV(21)); 
+     pn_gen random_number;
+    }
+ }
+ 
+  sig tempout[16];
+  
+always {
+    boxout = 0;
+    random_number.seed = seed.q;
+    edge_detector_next.in = fastclock.value;
+    random_number.next = 0;
+    if (edge_detector_next.out){
+      random_number.next = edge_detector_next.out;
+      seed.d = seed.q + 1;
+    }
+    tempout = random_number.num[15:0];
+    
+    // Ensure within row limits
+    if (tempout[10:6] == 0) {
+      tempout = c{tempout[15:11], 5b00001, tempout[5:0]};  
+    } else if (tempout[10:6] == 31) {
+      tempout = c{tempout[15:11], 5b11110, tempout[5:0]};
+    }
+    
+    // Ensure within column limits
+    if (tempout[5:0] == 0) {
+      tempout = c{tempout[15:6], 6b000001};
+    } else if (tempout[5:0] > 26) {
+      tempout = c{tempout[15:6], 6b011010};
+    }
+    
+    boxout = tempout;
+}

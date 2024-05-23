@@ -1,0 +1,107 @@
+module au_top (
+    input clk,              // 100MHz clock
+    input rst_n,            // reset button (active low)
+    output led [8],         // 8 user controllable LEDs
+    input usb_rx,           // USB->Serial input
+    output usb_tx,          // USB->Serial output
+    output io_led [3][8],   // LEDs on IO Shield
+    output io_seg [8],      // 7-segment LEDs on IO Shield
+    output io_sel [4],      // Digit select on IO Shield
+    input io_button [5],    // 5 buttons on IO Shield
+    input io_dip [3][8],     // DIP switches on IO Shield
+    
+    // to matrix. See custom.acf for pins
+    output red0,
+    output green0, 
+    output blue0,
+    output red1,
+    output green1,
+    output blue1,
+    output latch, 
+    output blank, // also known as oe
+    output sclk_out,
+    output address[4] // row address current write to LED matrix
+  ) {
+  
+  sig rst;                  // reset signal
+  
+  // ramwriter ---> matrixram ---> matrixwriter ---> hardware
+  matrix_writer matrixwriter(.clk(clk), .rst(rst));
+  ram_writer ramwriter(#DATA_WIDTH(16), .clk(clk), .rst(rst));
+  matrix_ram matrixram(.clk(clk), .rst(rst));
+  
+  
+  .clk(clk) {
+    // The reset conditioner is used to synchronize the reset signal to the FPGA
+    // clock. This ensures the entire FPGA comes out of reset at the same time.
+    
+    .rst(rst) {
+      game_BETA gameMachine;
+    }
+    
+    edge_detector playerOneButtonsEdge[5](#RISE(1), #FALL(0));
+    edge_detector playerTwoButtonsEdge[5](#RISE(1), #FALL(0));
+    button_conditioner playerOneButtons[5];
+    button_conditioner playerTwoButtons[5];
+    reset_conditioner reset_cond;
+  }
+  
+  always {
+    reset_cond.in = io_dip[2][7]; // input raw inverted reset signal
+    rst = reset_cond.out;   // conditioned reset
+    usb_tx = usb_rx;        // loop serial port
+    led = 8h00;             // turn LEDs off
+    io_led = 3x{{8h00}};    // turn LEDs off
+    io_seg = 8hff;          // turn segments off
+    io_sel = 4hf;           // select no digits
+    
+    // Reduce bouncing effects on button
+    // Pass button inputs to BETA
+    playerOneButtons.in = io_button;
+    playerOneButtonsEdge.in = playerOneButtons.out;
+    gameMachine.playerOneButtons = playerOneButtonsEdge.out;
+    
+    playerTwoButtons.in = io_dip[2][6:3];
+    playerTwoButtonsEdge.in = playerTwoButtons.out;
+    gameMachine.playerTwoButtons = playerTwoButtonsEdge.out;
+    
+    // To Output Driver
+    ramwriter.reload = gameMachine.reload;
+    ramwriter.playeronepos = gameMachine.playeronepos;
+    ramwriter.playertwopos = gameMachine.playertwopos;
+    ramwriter.boxpos = gameMachine.boxpos;
+    ramwriter.bombpos = gameMachine.bombpos;
+    ramwriter.defuseprogress = gameMachine.defuseprogress;
+    ramwriter.bombtimer = gameMachine.bombtimer;
+    ramwriter.numofrounds = gameMachine.numofrounds;
+    
+    // For testing purposes
+    io_led[0] = gameMachine.boxpos[7:0];
+    io_led[1] = gameMachine.boxpos[15:8];
+    io_led[2]=  gameMachine.bombtimer[7:0];
+    
+    matrixram.row_address_top = ramwriter.row_address_top;
+    matrixram.col_address_top = ramwriter.col_address_top;
+    matrixram.we_top = ramwriter.we_top;
+    matrixram.wd_top = ramwriter.wd_top;
+    matrixram.row_address_btm = ramwriter.row_address_btm;
+    matrixram.col_address_btm = ramwriter.col_address_btm;
+    matrixram.we_btm = ramwriter.we_btm;
+    matrixram.wd_btm = ramwriter.wd_btm;
+    matrixram.ready = ramwriter.ready;
+    matrixram.row_address = matrixwriter.row_index;
+    matrixram.col_address = matrixwriter.col_index;
+    matrixwriter.data = c{matrixram.bottom_out, matrixram.top_out};
+  
+    red0 = matrixwriter.red0;
+    red1 = matrixwriter.red1;
+    green0 = matrixwriter.green0;
+    green1 = matrixwriter.green1;
+    blue0 = matrixwriter.blue0;
+    blue1 = matrixwriter.blue1;
+    latch = matrixwriter.latch;
+    sclk_out = matrixwriter.sclk_out;
+    blank = matrixwriter.blank;
+    address = matrixwriter.address;
+  }
+}

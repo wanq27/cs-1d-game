@@ -1,0 +1,16 @@
+module boolean (
+    input a[16],
+    input b[16],
+    input alufn_signal[6],
+    output bool[16]
+  ) {
+
+  mux_4 mux[16];
+  
+  always {
+    mux.in = 16x{{alufn_signal[3:0]}};
+    mux.s0 = a[15:0];
+    mux.s1 = b[15:0];
+    bool = mux.out;
+  }
+}

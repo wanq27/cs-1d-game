@@ -1,0 +1,110 @@
+module game_BETA (
+    input playerOneButtons[5],
+    input playerTwoButtons[5],
+    
+    input clk,  // clock
+    input rst,  // reset
+    
+    output reload,
+    output playeronepos[16],
+    output playertwopos[16],
+    output boxpos[16],
+    output bombpos[16],
+    output numofrounds[16],
+    output playerholding[16],
+    output bombtimer[16],
+    output defuseprogress[16]
+  ) {
+
+  sig inputALU_A[16];
+  sig inputALU_B[16];
+  
+  
+  .clk(clk) {
+    // Game Timer Decrement
+    edge_detector game_timer_detector(#RISE(1), #FALL(0));
+    // Defuse Progress Decrement
+    edge_detector defuse_progress_detector(#RISE(1), #FALL(0));
+    
+    .rst(rst) {
+      game_CU game_controlunit;
+      game_REGFILE game_regfile;
+      alu game_alu;
+      counter slow_timer(#SIZE(1), #DIV(26)); 
+      counter fast_timer(#SIZE(1), #DIV(24)); 
+    }
+  }
+  
+  always {
+    // Game Timer Decrement
+    game_timer_detector.in = slow_timer.value;
+    game_controlunit.decreaseBombTimer = game_timer_detector.out;
+    // Defuse Progress Decrement
+    defuse_progress_detector.in = fast_timer.value;
+    game_controlunit.decreaseDefuseProgress = defuse_progress_detector.out;
+    
+    // Pass to CU for clamping
+    game_controlunit.playeronepos = game_regfile.playeronepos; 
+    game_controlunit.playertwopos = game_regfile.playertwopos; 
+    game_controlunit.boxpos = game_regfile.boxpos;
+    game_controlunit.bombpos = game_regfile.bombpos;
+    game_controlunit.numofrounds = game_regfile.numofrounds;
+    game_controlunit.playerholding = game_regfile.playerholding;
+    game_controlunit.bombtimer = game_regfile.bombtimer;
+    game_controlunit.defuseprogress = game_regfile.defuseprogress;
+    
+    // Pass values to Output Driver
+    playeronepos = game_regfile.playeronepos;
+    playertwopos = game_regfile.playertwopos;
+    boxpos = game_regfile.boxpos;
+    bombpos = game_regfile.bombpos;
+    numofrounds = game_regfile.numofrounds;
+    playerholding = game_regfile.playerholding;
+    bombtimer = game_regfile.bombtimer;
+    defuseprogress = game_regfile.defuseprogress;
+    
+    // Pass button press and reload signal to CU unit
+    game_controlunit.playerOneButtons = playerOneButtons;
+    game_controlunit.playerTwoButtons = playerTwoButtons;
+    reload = game_controlunit.reload;
+    
+    // Setup REGFILE
+    game_regfile.we = game_controlunit.we_regfile;
+    game_regfile.writeAddress = game_controlunit.regfile_write_address;
+    game_regfile.readAddressA = game_controlunit.regfile_read_address_a;
+    game_regfile.readAddressB = game_controlunit.regfile_read_address_b;
+    
+    // ASEL Mux
+    case(game_controlunit.asel) {
+      b00: inputALU_A = game_regfile.outA;
+      b01: inputALU_A = b0000010000010000; // Player 1 Starting Position
+      b10: inputALU_A = b0000010000110000; // Player 2 Starting Position
+      b11: inputALU_A = b0000000000000000; // Used to reset variables/parameters to zero
+      default:
+        inputALU_A = b0000000000000000;
+    }
+    
+    // BSEL Mux
+    case(game_controlunit.bsel) {
+      b00: inputALU_B = game_regfile.outB;
+      b01: inputALU_B = b0000000000000001; // Used when changing player's position & subtracting bomb timer
+      b10: inputALU_B = b0000000000000101; // Used to switch box position to other side & add to bomb timer when bomb is defused
+      b11: inputALU_B = b0000000000000111; // To reset defuse progress
+      default:
+        inputALU_B = b0000000000000000;
+      
+    }
+    
+    // ALU
+    game_alu.a = inputALU_A;
+    game_alu.b = inputALU_B;
+    game_alu.alufn_signal = game_controlunit.alufn;
+    
+    // WDSEL Mux
+    case (game_controlunit.alu_out_sel) {
+      b01: game_regfile.data = b1111111111111111;
+      default:
+        game_regfile.data = game_alu.out;
+    }
+  }
+}

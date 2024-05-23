@@ -1,0 +1,31 @@
+module x_bit_left_shifter #(
+  SHIFT = 8 : SHIFT > -1 & SHIFT < 16
+  )(
+    input a[16],
+    input shift,
+    input pad,
+    input type,
+    output out[16]
+  ) {
+  mux_2 mux[16];
+  sig shifted_bits[16];
+  var i;
+  
+  always {
+    mux.s0 = 16x{shift};
+    if (type == 0) {
+        // Shift Left  
+        shifted_bits = c{a[15-SHIFT:0], SHIFTx{pad}};
+    } else {
+        // Shift Right
+        shifted_bits = c{SHIFTx{pad}, a[15:SHIFT]};
+    }
+    
+    for(i = 0; i < 16; i++) {
+      mux.in[i][0] = a[i];
+      mux.in[i][1] = shifted_bits[i];
+    }
+    
+    out = mux.out;
+  }
+}

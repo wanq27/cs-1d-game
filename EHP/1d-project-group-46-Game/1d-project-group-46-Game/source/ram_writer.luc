@@ -1,0 +1,592 @@
+// This module is a custom module to load specific data to the RAM
+// You dont have to understand what data is specifically made, except to load data to our matrix_ram
+// DO NOT COPY this module blindly, it's not meant for general purpose
+
+module ram_writer #(
+  // 32 by 64 LED matrix by default, separated into top-16 rows and bottom 16-rows
+  // both halves row i are written together for all rows 0 to 15 in a rapid loop 
+  ADDRESS_SIZE = 4 : ADDRESS_SIZE > 0, //width of the address field (ABCD signals for matrix_led) 
+  MATRIX_WIDTH = 64 : MATRIX_WIDTH > 0, //number of LEDs per row in the matrix
+  DATA_WIDTH = 16 : DATA_WIDTH > 0, 
+  DATA_SET = 3 : DATA_SET > 0
+  )(
+    input clk,  // clock
+    input rst,  // reset
+    
+    input reload,
+    input playeronepos[16],
+    input playertwopos[16],
+    input boxpos[16],
+    input bombpos[16],
+    input defuseprogress[16],
+    input bombtimer[16],
+    input numofrounds[16],
+   
+    output row_address_top[ADDRESS_SIZE],
+    output col_address_top[$clog2(MATRIX_WIDTH)],
+    output we_top,
+    output wd_top[3],
+    
+    output row_address_btm[ADDRESS_SIZE],
+    output col_address_btm[$clog2(MATRIX_WIDTH)],
+    output we_btm,
+    output wd_btm[3],
+    
+    output ready
+  ) {
+  
+    // Game Timer Decrement
+    .clk(clk) {
+      edge_detector bomb_flash_detector(#RISE(1), #FALL(0));
+      edge_detector bomb_flash_detector_fast(#RISE(1), #FALL(0));
+    
+      .rst(rst) {
+        counter slow_timer(#SIZE(1), #DIV(25));
+        counter fast_timer(#SIZE(1), #DIV(24));
+      }
+    }
+  
+    sig tempPos[16];
+    dff bombState[1](#INIT(1), .clk(clk), .rst(rst));
+    dff tempPosCounter[16](#INIT(0), .clk(clk), .rst(rst));
+    fsm writer_state(.clk(clk), .rst(rst)) = {START, WRITE_AGAIN, LOAD_PLAYER_ONE_POS, WRITE_BOX_AGAIN, WRITE_BOMB_AGAIN, LOAD_PLAYER_TWO_POS, LOAD_BOX_POS, LOAD_BOMB_POS, LOAD_BORDER, CLEAR_SCREEN, GAME_OVER, STOP_LOADING, LOAD_PLAYER_ROUNDS, LOOP};
+    dff data_top_col_address[$clog2(MATRIX_WIDTH)](#INIT(28),.clk(clk),.rst(rst));
+    dff data_top_row_address[ADDRESS_SIZE](#INIT(0),.clk(clk),.rst(rst));
+    
+  always {
+    ready = b0;
+    we_top = b0;
+    we_btm = b0;
+    wd_top = 0;
+    wd_btm = 0;
+    row_address_top = 0;
+    row_address_btm = 0;
+    col_address_top = 0;
+    col_address_btm = 0;
+    
+    // Signal Declaration
+    tempPos = 0;
+    bomb_flash_detector.in = slow_timer.value;
+    bomb_flash_detector_fast.in = fast_timer.value;
+    // End of Signal Declaration
+    
+    case(writer_state.q){
+      writer_state.START:
+        ready = b0;
+        writer_state.d = writer_state.CLEAR_SCREEN;
+      writer_state.LOAD_PLAYER_ONE_POS:
+        if (tempPosCounter.q == 0) {
+          // Main Dot
+          tempPos = playeronepos;
+        } else if (tempPosCounter.q == 1) {
+          // Top Left Dot
+          tempPos = c{5b0, playeronepos[10:6] - 1, playeronepos[5:0] - 1};
+        } else if (tempPosCounter.q == 2) {
+          // Top Middle Dot
+          tempPos = c{5b0, playeronepos[10:6] - 1, playeronepos[5:0]};
+        } else if (tempPosCounter.q == 3) {
+          // Top Right Dot
+          tempPos = c{5b0, playeronepos[10:6] - 1, playeronepos[5:0] + 1};
+        } else if (tempPosCounter.q == 4) {
+          // Middle Left Dot
+          tempPos = c{5b0, playeronepos[10:6], playeronepos[5:0] - 1};
+        } else if (tempPosCounter.q == 5) {
+          // Middle Right Dot
+          tempPos = c{5b0, playeronepos[10:6], playeronepos[5:0] + 1};
+        } else if (tempPosCounter.q == 6) {
+          // Bottom Left Dot
+          tempPos = c{5b0, playeronepos[10:6] + 1, playeronepos[5:0] - 1};
+        } else if (tempPosCounter.q == 7) {
+          // Bottom Middle Dot
+          tempPos = c{5b0, playeronepos[10:6] + 1, playeronepos[5:0]};
+        } else if (tempPosCounter.q == 8) {
+          // Bottom Right Dot
+          tempPos = c{5b0, playeronepos[10:6] + 1, playeronepos[5:0] + 1};
+        } else if (tempPosCounter.q == 9) {
+          // CONTINUE LOADING
+          tempPosCounter.d = 0;
+          writer_state.d = writer_state.LOAD_PLAYER_TWO_POS;
+        }
+  
+        tempPosCounter.d = tempPosCounter.q + 1;
+        
+        if (tempPos[10:6] > 15) {
+          // WRITE TO BOTTOM SCREEN
+          wd_btm = b100;
+          we_btm = b1;
+          row_address_btm = tempPos[10:6] - 16;
+          col_address_btm = tempPos[5:0];
+        } else {
+          // WRITE TO TOP SCREEN
+          wd_top = b100;
+          we_top = b1;
+          row_address_top = tempPos[9:6];
+          col_address_top = tempPos[5:0];
+        }
+      writer_state.LOAD_PLAYER_TWO_POS:
+        if (tempPosCounter.q == 0) {
+          // Main Dot
+          tempPos = playertwopos;
+        } else if (tempPosCounter.q == 1) {
+          // Top Left Dot
+          tempPos = c{5b0, playertwopos[10:6] - 1, playertwopos[5:0] - 1};
+        } else if (tempPosCounter.q == 2) {
+          // Top Middle Dot
+          tempPos = c{5b0, playertwopos[10:6] - 1, playertwopos[5:0]};
+        } else if (tempPosCounter.q == 3) {
+          // Top Right Dot
+          tempPos = c{5b0, playertwopos[10:6] - 1, playertwopos[5:0] + 1};
+        } else if (tempPosCounter.q == 4) {
+          // Middle Left Dot
+          tempPos = c{5b0, playertwopos[10:6], playertwopos[5:0] - 1};
+        } else if (tempPosCounter.q == 5) {
+          // Middle Right Dot
+          tempPos = c{5b0, playertwopos[10:6], playertwopos[5:0] + 1};
+        } else if (tempPosCounter.q == 6) {
+          // Bottom Left Dot
+          tempPos = c{5b0, playertwopos[10:6] + 1, playertwopos[5:0] - 1};
+        } else if (tempPosCounter.q == 7) {
+          // Bottom Middle Dot
+          tempPos = c{5b0, playertwopos[10:6] + 1, playertwopos[5:0]};
+        } else if (tempPosCounter.q == 8) {
+          // Bottom Right Dot
+          tempPos = c{5b0, playertwopos[10:6] + 1, playertwopos[5:0] + 1};
+        } else if (tempPosCounter.q == 9) {
+          // CONTINUE LOADING
+          tempPosCounter.d = 0;
+          writer_state.d = writer_state.LOAD_BOX_POS;
+        }
+        
+        tempPosCounter.d = tempPosCounter.q + 1;
+        
+        if (tempPos[10:6] > 15) {
+          // WRITE TO BOTTOM SCREEN
+          wd_btm = b100;
+          we_btm = b1;
+          row_address_btm = tempPos[10:6] - 16;
+          col_address_btm = tempPos[5:0];
+        } else {
+          // WRITE TO TOP SCREEN
+          wd_top = b100;
+          we_top = b1;
+          row_address_top = tempPos[9:6];
+          col_address_top = tempPos[5:0];
+        }
+      writer_state.LOAD_BOX_POS:
+        if (tempPosCounter.q == 0) {
+          // Top Left Dot
+          tempPos = c{5b0, boxpos[10:6] - 1, boxpos[5:0] - 1};
+        } else if (tempPosCounter.q == 1) {
+          // Top Middle Dot
+          tempPos = c{5b0, boxpos[10:6] - 1, boxpos[5:0]};
+        } else if (tempPosCounter.q == 2) {
+          // Top Right Dot
+          tempPos = c{5b0, boxpos[10:6] - 1, boxpos[5:0] + 1};
+        } else if (tempPosCounter.q == 3) {
+          // Middle Left Dot
+          tempPos = c{5b0, boxpos[10:6], boxpos[5:0] - 1};
+        } else if (tempPosCounter.q == 4) {
+          // Middle Right Dot
+          tempPos = c{5b0, boxpos[10:6], boxpos[5:0] + 1};
+        } else if (tempPosCounter.q == 5) {
+          // Bottom Left Dot
+          tempPos = c{5b0, boxpos[10:6] + 1, boxpos[5:0] - 1};
+        } else if (tempPosCounter.q == 6) {
+          // Bottom Middle Dot
+          tempPos = c{5b0, boxpos[10:6] + 1, boxpos[5:0]};
+        } else if (tempPosCounter.q == 7) {
+          // Bottom Right Dot
+          tempPos = c{5b0, boxpos[10:6] + 1, boxpos[5:0] + 1};
+        } else if (tempPosCounter.q == 8 && bombState.q == 0) {
+          // CONTINUE LOADING
+          tempPosCounter.d = 0;
+          writer_state.d = writer_state.LOAD_BORDER;
+        } else if (tempPosCounter.q == 8 && bombState.q == 1) {
+          tempPosCounter.d = 0;
+          writer_state.d = writer_state.LOAD_BOMB_POS;
+        }
+                
+        tempPosCounter.d = tempPosCounter.q + 1;
+        
+        if (tempPos[10:6] > 15) {
+          // WRITE TO BOTTOM SCREEN
+          wd_btm = b011;
+          we_btm = b1;
+          row_address_btm = tempPos[10:6] - 16;
+          col_address_btm = tempPos[5:0];
+        } else {
+          // WRITE TO TOP SCREEN
+          wd_top = b011;
+          we_top = b1;
+          row_address_top = tempPos[9:6];
+          col_address_top = tempPos[5:0];
+        }
+      writer_state.LOAD_BOMB_POS:
+        if (tempPosCounter.q == 0) {
+          // Top Left Dot
+          tempPos = c{5b0, bombpos[10:6] - 1, bombpos[5:0] - 1};
+        } else if (tempPosCounter.q == 1) {
+          // Top Middle Dot
+          tempPos = c{5b0, bombpos[10:6] - 1, bombpos[5:0]};
+        } else if (tempPosCounter.q == 2) {
+          // Top Right Dot
+          tempPos = c{5b0, bombpos[10:6] - 1, bombpos[5:0] + 1};
+        } else if (tempPosCounter.q == 3) {
+          // Middle Right Dot
+          tempPos = c{5b0, bombpos[10:6], bombpos[5:0] + 1};
+        } else if (tempPosCounter.q == 4) {
+          // Bottom Right Dot
+          tempPos = c{5b0, bombpos[10:6] + 1, bombpos[5:0] + 1};
+        } else if (tempPosCounter.q == 5) {
+          // Bottom Middle Dot
+          tempPos = c{5b0, bombpos[10:6] + 1, bombpos[5:0]};
+        } else if (tempPosCounter.q == 6) {
+          // Bottom Left Dot
+          tempPos = c{5b0, bombpos[10:6] + 1, bombpos[5:0] - 1};
+        } else if (tempPosCounter.q == 7) {
+          // Middle Left Dot
+          tempPos = c{5b0, bombpos[10:6], bombpos[5:0] - 1};
+        }
+        
+        if (tempPos[10:6] > 15) {
+          // WRITE TO BOTTOM SCREEN
+          if (numofrounds >= 5 && numofrounds <= 6) {
+            wd_btm = b011;
+            we_btm = b1;
+          } else {
+            wd_btm = b001;
+            we_btm = b1;
+          }
+          row_address_btm = tempPos[10:6] - 16;
+          col_address_btm = tempPos[5:0];
+        } else {
+          // WRITE TO TOP SCREEN
+          if (numofrounds >= 5 && numofrounds <= 6) {
+            wd_top = b011;
+            we_top = b1;
+          } else {
+            wd_top = b001;
+            we_top = b1;
+          }
+          row_address_top = tempPos[9:6];
+          col_address_top = tempPos[5:0];
+        }
+        
+        if (tempPosCounter.q == defuseprogress) {
+          // CONTINUE LOADING
+          tempPosCounter.d = 0;
+          writer_state.d = writer_state.LOAD_BORDER;
+        } else {
+          tempPosCounter.d = tempPosCounter.q + 1;
+        }
+      writer_state.LOAD_BORDER:
+        if (data_top_col_address.q < 31 || data_top_col_address.q > 32) {
+          wd_top = b010;
+          we_top = b1;
+          row_address_top = 0;
+          col_address_top = data_top_col_address.q;
+          
+          wd_btm = b010;
+          we_btm = b1;
+          row_address_btm = 31;
+          col_address_btm = data_top_col_address.q; 
+        } else {
+          wd_top = b010;
+          we_top = b1;
+          row_address_top = data_top_row_address.q;
+          col_address_top = data_top_col_address.q;
+          
+          wd_btm = b010;
+          we_btm = b1;
+          row_address_btm = data_top_row_address.q;
+          col_address_btm = data_top_col_address.q; 
+        }
+        
+        data_top_row_address.d = data_top_row_address.q + 1;
+               
+        if (data_top_row_address.q == 15) {
+          if (data_top_col_address.q == 35) {
+            tempPosCounter.d = 0;
+            data_top_col_address.d = 31;
+            writer_state.d = writer_state.LOAD_PLAYER_ROUNDS;
+          } else {
+            data_top_col_address.d = data_top_col_address.q + 1;
+          }
+        }
+      writer_state.LOAD_PLAYER_ROUNDS:
+        if (data_top_col_address.q == 31) {
+          wd_top = b001;
+          we_top = b1;
+          row_address_top = tempPosCounter.q + 1;
+          col_address_top = 31;
+        } else if (data_top_col_address.q == 32) {
+          wd_btm = b001;
+          we_btm = b1;
+          row_address_btm = 30 - tempPosCounter.q;
+          col_address_btm = 32;
+        }
+          
+        if (tempPosCounter.q < numofrounds) {
+          tempPosCounter.d = tempPosCounter.q + 1;
+        } else if (data_top_col_address.q == 31) {
+          // FINISHED
+          tempPosCounter.d = 0;
+          data_top_col_address.d = 32;
+        } else if (data_top_col_address.q == 32) {
+          writer_state.d = writer_state.WRITE_AGAIN;
+        }
+      writer_state.WRITE_AGAIN:
+        if (tempPosCounter.q == 0) {
+          // Main Dot
+          tempPos = playeronepos;
+        } else if (tempPosCounter.q == 1) {
+          // Top Left Dot
+          tempPos = c{5b0, playeronepos[10:6] - 1, playeronepos[5:0] - 1};
+        } else if (tempPosCounter.q == 2) {
+          // Top Middle Dot
+          tempPos = c{5b0, playeronepos[10:6] - 1, playeronepos[5:0]};
+        } else if (tempPosCounter.q == 3) {
+          // Top Right Dot
+          tempPos = c{5b0, playeronepos[10:6] - 1, playeronepos[5:0] + 1};
+        } else if (tempPosCounter.q == 4) {
+          // Middle Left Dot
+          tempPos = c{5b0, playeronepos[10:6], playeronepos[5:0] - 1};
+        } else if (tempPosCounter.q == 5) {
+          // Middle Right Dot
+          tempPos = c{5b0, playeronepos[10:6], playeronepos[5:0] + 1};
+        } else if (tempPosCounter.q == 6) {
+          // Bottom Left Dot
+          tempPos = c{5b0, playeronepos[10:6] + 1, playeronepos[5:0] - 1};
+        } else if (tempPosCounter.q == 7) {
+          // Bottom Middle Dot
+          tempPos = c{5b0, playeronepos[10:6] + 1, playeronepos[5:0]};
+        } else if (tempPosCounter.q == 8) {
+          // Bottom Right Dot
+          tempPos = c{5b0, playeronepos[10:6] + 1, playeronepos[5:0] + 1};
+        } else if (tempPosCounter.q == 9) {
+          // CONTINUE LOADING
+          tempPosCounter.d = 0;
+          writer_state.d = writer_state.WRITE_BOX_AGAIN;
+        }
+  
+        tempPosCounter.d = tempPosCounter.q + 1;
+        
+        if (tempPos[10:6] > 15) {
+          // WRITE TO BOTTOM SCREEN
+          wd_btm = b100;
+          we_btm = b1;
+          row_address_btm = tempPos[10:6] - 16;
+          col_address_btm = tempPos[5:0];
+        } else {
+          // WRITE TO TOP SCREEN
+          wd_top = b100;
+          we_top = b1;
+          row_address_top = tempPos[9:6];
+          col_address_top = tempPos[5:0];
+        }
+
+      writer_state.WRITE_BOX_AGAIN:
+        if (tempPosCounter.q == 0) {
+          // Top Left Dot
+          tempPos = c{5b0, boxpos[10:6] - 1, boxpos[5:0] - 1};
+        } else if (tempPosCounter.q == 1) {
+          // Top Middle Dot
+          tempPos = c{5b0, boxpos[10:6] - 1, boxpos[5:0]};
+        } else if (tempPosCounter.q == 2) {
+          // Top Right Dot
+          tempPos = c{5b0, boxpos[10:6] - 1, boxpos[5:0] + 1};
+        } else if (tempPosCounter.q == 3) {
+          // Middle Left Dot
+          tempPos = c{5b0, boxpos[10:6], boxpos[5:0] - 1};
+        } else if (tempPosCounter.q == 4) {
+          // Middle Right Dot
+          tempPos = c{5b0, boxpos[10:6], boxpos[5:0] + 1};
+        } else if (tempPosCounter.q == 5) {
+          // Bottom Left Dot
+          tempPos = c{5b0, boxpos[10:6] + 1, boxpos[5:0] - 1};
+        } else if (tempPosCounter.q == 6) {
+          // Bottom Middle Dot
+          tempPos = c{5b0, boxpos[10:6] + 1, boxpos[5:0]};
+        } else if (tempPosCounter.q == 7) {
+          // Bottom Right Dot
+          tempPos = c{5b0, boxpos[10:6] + 1, boxpos[5:0] + 1};
+        } else if (tempPosCounter.q == 8 && bombState.q == 0) {
+          // CONTINUE LOADING
+          tempPosCounter.d = 0;
+          writer_state.d = writer_state.LOOP;
+        } else if (tempPosCounter.q == 8 && bombState.q == 1) {
+          tempPosCounter.d = 0;
+          writer_state.d = writer_state.WRITE_BOMB_AGAIN;
+        }
+            
+        tempPosCounter.d = tempPosCounter.q + 1;
+        
+        if (tempPos[10:6] > 15) {
+          // WRITE TO BOTTOM SCREEN
+          wd_btm = b011;
+          we_btm = b1;
+          row_address_btm = tempPos[10:6] - 16;
+          col_address_btm = tempPos[5:0];
+        } else {
+          // WRITE TO TOP SCREEN
+          wd_top = b011;
+          we_top = b1;
+          row_address_top = tempPos[9:6];
+          col_address_top = tempPos[5:0];
+        }
+          
+      writer_state.WRITE_BOMB_AGAIN:
+        if (tempPosCounter.q == 0) {
+          // Top Left Dot
+          tempPos = c{5b0, bombpos[10:6] - 1, bombpos[5:0] - 1};
+        } else if (tempPosCounter.q == 1) {
+          // Top Middle Dot
+          tempPos = c{5b0, bombpos[10:6] - 1, bombpos[5:0]};
+        } else if (tempPosCounter.q == 2) {
+          // Top Right Dot
+          tempPos = c{5b0, bombpos[10:6] - 1, bombpos[5:0] + 1};
+        } else if (tempPosCounter.q == 3) {
+          // Middle Right Dot
+          tempPos = c{5b0, bombpos[10:6], bombpos[5:0] + 1};
+        } else if (tempPosCounter.q == 4) {
+          // Bottom Right Dot
+          tempPos = c{5b0, bombpos[10:6] + 1, bombpos[5:0] + 1};
+        } else if (tempPosCounter.q == 5) {
+          // Bottom Middle Dot
+          tempPos = c{5b0, bombpos[10:6] + 1, bombpos[5:0]};
+        } else if (tempPosCounter.q == 6) {
+          // Bottom Left Dot
+          tempPos = c{5b0, bombpos[10:6] + 1, bombpos[5:0] - 1};
+        } else if (tempPosCounter.q == 7) {
+          // Middle Left Dot
+          tempPos = c{5b0, bombpos[10:6], bombpos[5:0] - 1};
+        }
+        
+        if (tempPos[10:6] > 15) {
+          // WRITE TO BOTTOM SCREEN
+          if (numofrounds >= 5 && numofrounds <= 6) {
+            wd_btm = b011;
+            we_btm = b1;
+          } else {
+            wd_btm = b001;
+            we_btm = b1;
+          }
+          row_address_btm = tempPos[10:6] - 16;
+          col_address_btm = tempPos[5:0];
+        } else {
+          // WRITE TO TOP SCREEN
+          if (numofrounds >= 5 && numofrounds <= 6) {
+            wd_top = b011;
+            we_top = b1;
+          } else {
+            wd_top = b001;
+            we_top = b1;
+          }
+          row_address_top = tempPos[9:6];
+          col_address_top = tempPos[5:0];
+        }
+        
+        if (tempPosCounter.q == defuseprogress) {
+          // CONTINUE LOADING
+          tempPosCounter.d = 0;
+          writer_state.d = writer_state.LOOP;
+        } else {
+          tempPosCounter.d = tempPosCounter.q + 1;
+        }
+        
+      writer_state.CLEAR_SCREEN:
+        wd_top = b0;
+        wd_btm = b0;
+        we_top = b1;
+        we_btm = b1;
+        row_address_top = data_top_row_address.q;
+        col_address_top = data_top_col_address.q;
+        row_address_btm = data_top_row_address.q;
+        col_address_btm = data_top_col_address.q;
+        
+        if (data_top_col_address.q == 63) { // when address reached the last bit, 64th
+          data_top_col_address.d = 0;
+          if (data_top_row_address.q == 15) {
+            data_top_row_address.d = 0;
+            data_top_col_address.d = 28;
+            writer_state.d = writer_state.LOAD_PLAYER_ONE_POS;
+          } else {
+            data_top_row_address.d = data_top_row_address.q + 1; // increments
+          }
+        } else {
+          data_top_col_address.d = data_top_col_address.q + 1;
+        }
+          
+      writer_state.GAME_OVER:
+        wd_top = b001;
+        wd_btm = b001;
+        we_top = b1;
+        we_btm = b1;
+        row_address_top = data_top_row_address.q;
+        col_address_top = data_top_col_address.q;
+        row_address_btm = data_top_row_address.q;
+        col_address_btm = data_top_col_address.q;
+        
+        if (data_top_col_address.q == 63) { // when address reached the last bit, 64th
+          data_top_col_address.d = 0;
+          if (data_top_row_address.q == 15) {
+            data_top_row_address.d = 0;
+            data_top_col_address.d = 28;
+            writer_state.d = writer_state.STOP_LOADING;
+          } else {
+            data_top_row_address.d = data_top_row_address.q + 1; // increments
+          }
+        } else {
+          data_top_col_address.d = data_top_col_address.q + 1;
+        }
+      writer_state.STOP_LOADING:
+        ready = 1;
+          
+      writer_state.LOOP:
+        // provide output from ram after writing is done
+        ready = 1;
+        
+        if (reload) {
+          ready = 0;
+          data_top_col_address.d = 0;
+          data_top_row_address.d = 0;
+          writer_state.d = writer_state.CLEAR_SCREEN;
+        } else if (bombtimer == 0) {
+          ready = 0;
+          data_top_col_address.d = 0;
+          data_top_row_address.d = 0;
+          writer_state.d = writer_state.GAME_OVER;
+        } else if (boxpos[10:0] == bombpos[10:0] && bombState.q == 0) {
+          bombState.d = 1;
+          ready = 0;
+          data_top_col_address.d = 0;
+          data_top_row_address.d = 0;
+          writer_state.d = writer_state.CLEAR_SCREEN;
+        } else if (bomb_flash_detector.out && bombtimer >= 5 && bombtimer <= 10 && bombState.q == 0 && boxpos[10:0] != bombpos[10:0]) {
+          bombState.d = 1;
+          ready = 0;
+          data_top_col_address.d = 0;
+          data_top_row_address.d = 0;
+          writer_state.d = writer_state.CLEAR_SCREEN;
+        } else if (bomb_flash_detector.out && bombtimer >= 5 && bombtimer <= 10 && bombState.q == 1 && boxpos[10:0] != bombpos[10:0]) {
+          bombState.d = 0;
+          ready = 0;
+          data_top_col_address.d = 0;
+          data_top_row_address.d = 0;
+          writer_state.d = writer_state.CLEAR_SCREEN;
+        } else if (bomb_flash_detector_fast.out && bombtimer > 0 && bombtimer <= 4 && bombState.q == 0 && boxpos[10:0] != bombpos[10:0]) {
+          bombState.d = 1;
+          ready = 0;
+          data_top_col_address.d = 0;
+          data_top_row_address.d = 0;
+          writer_state.d = writer_state.CLEAR_SCREEN;
+        } else if (bomb_flash_detector_fast.out && bombtimer > 0 && bombtimer <= 4 && bombState.q == 1 && boxpos[10:0] != bombpos[10:0]) {
+          bombState.d = 0;
+          ready = 0;
+          data_top_col_address.d = 0;
+          data_top_row_address.d = 0;
+          writer_state.d = writer_state.CLEAR_SCREEN;
+        }
+    }
+  }
+}

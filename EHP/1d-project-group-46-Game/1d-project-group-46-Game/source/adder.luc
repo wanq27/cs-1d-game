@@ -1,0 +1,40 @@
+module adder (
+    input a[16],
+    input b[16],
+    input alufn_signal[6],
+    output out[16],
+    output z,
+    output v,
+    output n
+  ) {
+
+  full_adder fulladder[16];
+  var i;
+  sig node1, node2, node3, node4, node5;
+  
+  always {
+    fulladder.x[0] = a[0];
+    fulladder.y[0] = b[0] ^ alufn_signal[0]; // XOR
+    fulladder.cin[0] = alufn_signal[0];
+    
+    for(i = 1; i < 16; i++) {
+      fulladder.x[i] = a[i];
+      fulladder.y[i] = b[i] ^ alufn_signal[0];
+      fulladder.cin[i] = fulladder.cout[i - 1];
+    }
+    
+    out = fulladder.s;
+    
+    // Z
+    z = ~|fulladder.s; // ~ for NOT, | for OR
+    // V
+    node1 = alufn_signal[0] ^ b[15];
+    node2 = node1 & a[15];
+    node3 = node2 & (~fulladder.s[15]);
+    node4 = (~node1) & (~a[15]);
+    node5 = node4 & fulladder.s[15];
+    v = node3 | node5;
+    // N
+    n = fulladder.s[15];
+  }
+}

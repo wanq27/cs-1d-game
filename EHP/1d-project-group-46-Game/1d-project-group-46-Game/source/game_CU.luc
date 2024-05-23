@@ -1,0 +1,395 @@
+module game_CU (
+    input playerOneButtons[5],
+    input playerTwoButtons[5],
+    input decreaseBombTimer,
+    input decreaseDefuseProgress,
+    input bombtimer[16],
+    input playeronepos[16],
+    input playertwopos[16],
+    input boxpos[16],
+    input bombpos[16],
+    input numofrounds[16],
+    input playerholding[16],
+    input defuseprogress[16],
+   
+    input clk,  // clock
+    input rst,  // reset
+    
+    output reload,
+    output alufn[6],
+    output asel[3],
+    output bsel[3],
+    output alu_out_sel[2],
+    output regfile_write_address[4],
+    output regfile_read_address_a[4],
+    output regfile_read_address_b[4],
+    output we_regfile
+  ) {
+
+  .clk(clk) {
+    fsm gameFSM = {
+      IDLE,
+      SET_PLAYER_ONE_POS,
+      SET_PLAYER_TWO_POS,
+      CHANGE_PLAYER_ONE_POS_RIGHT,
+      CHANGE_PLAYER_ONE_POS_LEFT,
+      CHANGE_PLAYER_ONE_POS_UP,
+      CHANGE_PLAYER_ONE_POS_DOWN,
+      CHANGE_PLAYER_TWO_POS_RIGHT,
+      CHANGE_PLAYER_TWO_POS_LEFT,
+      CHANGE_PLAYER_TWO_POS_UP,
+      CHANGE_PLAYER_TWO_POS_DOWN,
+      SET_BOX_POS,
+      SET_BOMB_POS,
+      SET_NUM_OF_ROUNDS,
+      NEW_BOMB_TIMER,
+      NEW_BOX_POS,
+      NEW_BOMB_POS,
+      CHECK_BOX_POSITION,
+      BRANCH_BOX_POSITION,
+      UPDATE_BOX_POSITION,
+      RESET_PLAYER_HOLDING,
+      DECREASE_BOMB_TIMER,
+      DECREASE_DEFUSE_PROGRESS,
+      RESET_DEFUSE_PROGRESS,
+      GAME_OVER
+    };
+  }
+  
+  always {
+    alufn = 0;
+    asel = 0;
+    bsel = 0;
+    we_regfile = 0;
+    regfile_write_address = 1111;
+    regfile_read_address_a = 0000;
+    regfile_read_address_b = 0000;
+    alu_out_sel = 0;  
+    reload = 0;
+    
+    if (rst) {
+      reload = 1;
+      gameFSM.d = gameFSM.SET_PLAYER_ONE_POS;
+    } 
+    else {
+      case(gameFSM.q) {
+        gameFSM.SET_PLAYER_ONE_POS:
+          alufn = b011010; // A
+          asel = b01;      // b0000010000010000
+          we_regfile = b1;
+          regfile_write_address = b0000;
+          gameFSM.d = gameFSM.SET_PLAYER_TWO_POS; // to call next function
+        gameFSM.SET_PLAYER_TWO_POS:
+          alufn = b011010; // A
+          asel = b10;      // b0000010000110000
+          we_regfile = b1;
+          regfile_write_address = b0001;
+          gameFSM.d = gameFSM.SET_BOX_POS;
+        gameFSM.SET_BOX_POS:
+          alufn = b000101; // Generate Random
+          asel = b01;
+          we_regfile = b1;
+          regfile_write_address = b0010;
+          gameFSM.d = gameFSM.SET_BOMB_POS;
+        gameFSM.SET_BOMB_POS:
+          alufn = b000111; // Generate Random
+          asel = b01;
+          we_regfile = b1;
+          regfile_write_address = b0011;
+          gameFSM.d = gameFSM.SET_NUM_OF_ROUNDS;
+        gameFSM.SET_NUM_OF_ROUNDS:
+          alufn = b011010; // A
+          asel = b11;      // 1
+          we_regfile = b1;
+          regfile_write_address = b0100;
+          reload = 1;
+          gameFSM.d = gameFSM.IDLE;
+        gameFSM.CHANGE_PLAYER_ONE_POS_LEFT:
+          if (playeronepos[10:6] > 1) {
+            alufn = b000100; // Subtract (only to -----XXXXX------ bits)
+            regfile_read_address_a = b0000;
+            asel = b00;
+            bsel = b01;    
+            we_regfile = b1;      
+            regfile_write_address = b0000;
+          }
+          gameFSM.d = gameFSM.CHECK_BOX_POSITION;
+        gameFSM.CHANGE_PLAYER_ONE_POS_RIGHT:
+          if (playeronepos[10:6] < 30) {
+            alufn = b000011; // Add (only to -----XXXXX------ bits)
+            regfile_read_address_a = b0000;
+            asel = b00;
+            bsel = b01;    
+            we_regfile = b1;      
+            regfile_write_address = b0000;
+          }
+          gameFSM.d = gameFSM.CHECK_BOX_POSITION;
+        gameFSM.CHANGE_PLAYER_ONE_POS_UP:
+          if (playeronepos[5:0] < 29) {
+            alufn = b000000; // Add
+            regfile_read_address_a = b0000;
+            asel = b00;
+            bsel = b01;    
+            we_regfile = b1;      
+            regfile_write_address = b0000;
+          }
+          gameFSM.d = gameFSM.CHECK_BOX_POSITION;
+        gameFSM.CHANGE_PLAYER_ONE_POS_DOWN:
+          if (playeronepos[5:0] > 1) {
+            alufn = b000001; // Subtract
+            regfile_read_address_a = b0000;
+            asel = b00;
+            bsel = b01;    
+            we_regfile = b1;      
+            regfile_write_address = b0000;
+          }
+          gameFSM.d = gameFSM.CHECK_BOX_POSITION;
+         gameFSM.CHANGE_PLAYER_TWO_POS_RIGHT:
+          if (playertwopos[10:6] > 1) {
+            alufn = b000100; // Subtract (only to -----XXXXX------ bits)
+            regfile_read_address_a = b0001;
+            asel = b00;
+            bsel = b01;    
+            we_regfile = b1;      
+            regfile_write_address = b0001;
+          }
+          gameFSM.d = gameFSM.CHECK_BOX_POSITION;
+        gameFSM.CHANGE_PLAYER_TWO_POS_LEFT:
+          if (playertwopos[10:6] < 30) {
+            alufn = b000011; // Add (only to -----XXXXX------ bits)
+            regfile_read_address_a = b0001;
+            asel = b00;
+            bsel = b01;    
+            we_regfile = b1;      
+            regfile_write_address = b0001;
+          }
+          gameFSM.d = gameFSM.CHECK_BOX_POSITION;
+        gameFSM.CHANGE_PLAYER_TWO_POS_UP:
+          if (playertwopos[5:0] > 34) {
+            alufn = b000001; // Subtract
+            regfile_read_address_a = b0001;
+            asel = b00;
+            bsel = b01;    
+            we_regfile = b1;      
+            regfile_write_address = b0001;
+          }
+          gameFSM.d = gameFSM.CHECK_BOX_POSITION;
+        gameFSM.CHANGE_PLAYER_TWO_POS_DOWN:
+          if (playertwopos[5:0] < 62) {
+            alufn = b000000; // Add
+            regfile_read_address_a = b0001;
+            asel = b00;
+            bsel = b01;    
+            we_regfile = b1;      
+            regfile_write_address = b0001;
+          }
+          gameFSM.d = gameFSM.CHECK_BOX_POSITION;
+        gameFSM.CHECK_BOX_POSITION:
+          if (playerholding == 0) {
+            // No players are currently holding the box
+            // Check if player position equals box position so that we can update code to follow
+            if (playeronepos[10:0] == boxpos[10:0]) {
+              // Store parameter in REGFILE to follow player one
+              // playerholding = b0000010000010000;
+              alufn = b011010; // A
+              asel = b01;    
+              we_regfile = b1;
+              regfile_write_address = b0101;
+            }  else if (playertwopos[10:0] == boxpos[10:0]) {
+              // Store parameter in REGFILE to follow player two
+              // playerholding = b0000010000110000;
+              alufn = b011010; // A
+              asel = b10;    
+              we_regfile = b1;
+              regfile_write_address = b0101;
+            } else {
+              // Default scenario here
+              // playerholding = 0;
+              alufn = b011010; // A
+              asel = b11;    
+              we_regfile = b1;
+              regfile_write_address = b0101;
+            }
+          }
+          
+          // If player is already holding the box, UPDATE_BOX_POSITION will be ran immediately
+          gameFSM.d = gameFSM.UPDATE_BOX_POSITION;
+        gameFSM.UPDATE_BOX_POSITION:
+          if (playerholding == b0000010000010000) {
+            // Set box position to equals player one position  
+            alufn = b011010; // A
+            regfile_read_address_a = b0000;
+            asel = b00;    
+            we_regfile = b1;
+            regfile_write_address = b0010;
+          } else if (playerholding == b0000010000110000) {
+            // Set box position to equals player two position
+            alufn = b011010; // A
+            regfile_read_address_a = b0001;
+            asel = b00;    
+            we_regfile = b1;
+            regfile_write_address = b0010;
+          } else {
+            // No need to update box position
+          }
+          gameFSM.d = gameFSM.BRANCH_BOX_POSITION;
+        gameFSM.BRANCH_BOX_POSITION:
+          // Purpose of this branching is to check if
+          // (1) Bomb has been defused when defuse progress conditio
+          // (2) When box is at the border
+          if (defuseprogress == 0) {
+              // Bomb defused, TODO:
+              // (3) Increase round counter
+              // (4) Get new bomb timer
+              // (5) Spawn new box and bomb position
+              // (6) Set playerholding to 0 && reset defuseprogress to 7
+              // (7) Call CHECK_BOX_POSITION in case the box spawns on player's current position
+              // (3) //
+              alufn = b000000; // ADD
+              regfile_read_address_a = b0100;
+              asel = b00;
+              bsel = b01;
+              we_regfile = b1;
+              regfile_write_address = b0100;
+              gameFSM.d = gameFSM.NEW_BOMB_TIMER; // (4) //
+          } else if (boxpos[5:0] == 29) {
+            // Bomb is at the border, TODO:
+            // (8) Push box to other side (column + 5)
+            // (9) Set playerholding to 0
+            // (10) Call CHECK_BOX_POSITION to handle the case where player two is already situated there
+            // (8) //
+            alufn = b000000; // Add
+            regfile_read_address_a = b0010;
+            asel = b00;    
+            bsel = b10;
+            we_regfile = b1;
+            regfile_write_address = b0010;
+            gameFSM.d = gameFSM.RESET_PLAYER_HOLDING; // (9) //
+          } else {
+            // Conditions not satisfied, return back to IDLE state
+            gameFSM.d = gameFSM.IDLE;
+          }
+          
+          // Reload screen
+          reload = 1;
+        gameFSM.NEW_BOMB_TIMER:
+          // (4) // 
+          alufn = b000000; // Add
+          regfile_read_address_a = b0110; // Bomb Timer Value
+          asel = b00;
+          bsel = b10;
+          we_regfile = b1;
+          regfile_write_address = b0110;
+          gameFSM.d = gameFSM.NEW_BOX_POS; // (5) //
+        gameFSM.NEW_BOX_POS:
+          // (5) //
+          alufn = b000101; // Generate Random
+          asel = b01;
+          we_regfile = b1;
+          regfile_write_address = b0010;
+          gameFSM.d = gameFSM.NEW_BOMB_POS; // (5) //
+        gameFSM.NEW_BOMB_POS:
+          // (5) //
+          alufn = b000111; // Generate Random
+          asel = b01;
+          we_regfile = b1;
+          regfile_write_address = b0011;
+          gameFSM.d = gameFSM.RESET_DEFUSE_PROGRESS; // (6) //
+        gameFSM.RESET_DEFUSE_PROGRESS:
+          alufn = b000000; // Add
+          asel = b00;
+          regfile_read_address_a = b0111;
+          bsel = b11; // 7
+          we_regfile = b1;
+          regfile_write_address = b0111;
+          gameFSM.d = gameFSM.RESET_PLAYER_HOLDING; 
+        gameFSM.RESET_PLAYER_HOLDING:
+            // (6) & (9) //
+            alufn = b011010; // A
+            asel = b11;    
+            we_regfile = b1;
+            regfile_write_address = b0101;
+            gameFSM.d = gameFSM.CHECK_BOX_POSITION; // (7) & (10) //
+        gameFSM.DECREASE_BOMB_TIMER:
+            alufn = b000001; // Subtract
+            regfile_read_address_a = b0110; // Bomb Timer Value
+            asel = b00;
+            bsel = b01;      // Constant 1
+            we_regfile = b1;
+            regfile_write_address = b0110;
+            gameFSM.d = gameFSM.IDLE;
+        gameFSM.DECREASE_DEFUSE_PROGRESS:
+            alufn = b000001; // Subtract
+            regfile_read_address_a = b0111; // Defuse Progress
+            asel = b00;
+            bsel = b01;    
+            we_regfile = b1;
+            regfile_write_address = b0111;
+            // Call BRANCH_BOX_POSITION to check if defuse progress is satisfied -- means bomb defused!
+            gameFSM.d = gameFSM.BRANCH_BOX_POSITION;
+        gameFSM.GAME_OVER:
+            // GAME OVER
+            gameFSM.d = gameFSM.GAME_OVER;
+        gameFSM.IDLE:
+          reload = 0;
+          
+          if (bombtimer == 0) {
+            gameFSM.d = gameFSM.GAME_OVER;
+          } else if (decreaseBombTimer) {
+            gameFSM.d = gameFSM.DECREASE_BOMB_TIMER;
+          } else if (boxpos[10:0] == bombpos[10:0] && decreaseDefuseProgress) {
+            // Decrement Defuse Progress
+            gameFSM.d = gameFSM.DECREASE_DEFUSE_PROGRESS;
+          } else if (playerOneButtons[0]) {
+            if (numofrounds >= 5 && numofrounds <= 6) {
+              gameFSM.d = gameFSM.CHANGE_PLAYER_TWO_POS_RIGHT;
+            } else {
+              gameFSM.d = gameFSM.CHANGE_PLAYER_ONE_POS_RIGHT;
+            }
+          } else if (playerOneButtons[1]) {
+            if (numofrounds >= 5 && numofrounds <= 6) {
+              gameFSM.d = gameFSM.CHANGE_PLAYER_TWO_POS_LEFT;
+            } else {
+              gameFSM.d = gameFSM.CHANGE_PLAYER_ONE_POS_LEFT;
+            }
+          } else if (playerOneButtons[2]) {
+            if (numofrounds >= 5 && numofrounds <= 6) {
+              gameFSM.d = gameFSM.CHANGE_PLAYER_TWO_POS_UP;
+            } else {
+              gameFSM.d = gameFSM.CHANGE_PLAYER_ONE_POS_UP;
+            }
+          } else if (playerOneButtons[3]) {
+            if (numofrounds >= 5 && numofrounds <= 6) {
+              gameFSM.d = gameFSM.CHANGE_PLAYER_TWO_POS_DOWN;
+            } else {
+              gameFSM.d = gameFSM.CHANGE_PLAYER_ONE_POS_DOWN;
+            }
+          } else if (playerTwoButtons[0]) {
+            if (numofrounds >= 5 && numofrounds <= 6) {
+              gameFSM.d = gameFSM.CHANGE_PLAYER_ONE_POS_RIGHT;
+            } else {
+              gameFSM.d = gameFSM.CHANGE_PLAYER_TWO_POS_RIGHT;
+            }
+          } else if (playerTwoButtons[1]) {
+            if (numofrounds >= 5 && numofrounds <= 6) {
+              gameFSM.d = gameFSM.CHANGE_PLAYER_ONE_POS_LEFT;
+            } else {
+              gameFSM.d = gameFSM.CHANGE_PLAYER_TWO_POS_LEFT;
+            }
+          } else if (playerTwoButtons[2]) {
+            if (numofrounds >= 5 && numofrounds <= 6) {
+              gameFSM.d = gameFSM.CHANGE_PLAYER_ONE_POS_UP;
+            } else {
+              gameFSM.d = gameFSM.CHANGE_PLAYER_TWO_POS_UP;
+            }
+          } else if (playerTwoButtons[3]) {
+            if (numofrounds >= 5 && numofrounds <= 6) {
+              gameFSM.d = gameFSM.CHANGE_PLAYER_ONE_POS_DOWN;
+            } else {
+              gameFSM.d = gameFSM.CHANGE_PLAYER_TWO_POS_DOWN;
+            }
+          }
+      }
+    }
+  }
+}
